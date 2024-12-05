@@ -1,5 +1,7 @@
 import { Configuration } from './@types/Configuration';
-import { Envoy } from './@types/Envoy';
+import { DefaultEnvoy, Envoy } from './@types/Envoy';
+import { RequestOptions } from './@types/RequestOptions';
+import asyncQueue from './utils/asyncQueue';
 
 const defaultConfig: Configuration = {
     baseUrl: '',
@@ -7,153 +9,87 @@ const defaultConfig: Configuration = {
 };
 
 const createEnvoy = (customConfig: Configuration): Envoy => {
-    const config: Required<Configuration> = {
-        useQueue: false,
+    let config: Required<Configuration> = {
+        queueEnabled: false,
         queueMaxRunning: 3,
         enableProfiling: false,
         defaultHeaders: {},
         profilingLogger: () => null,
         ...customConfig
-    }
-
-    const get = async <T>(url: string, options?: Omit<RequestInit, 'method'>): Promise<T> => {
-        return new Promise(async (resolve, reject) => {
-            const { headers, ...rest } = options || {};
-
-            try {
-                const response = await fetch(config.baseUrl + url, {
-                    method: 'GET',
-                    headers: { ...config.defaultHeaders, ...headers },
-                    ...rest
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-
-                const body: T = await response.json();
-
-                resolve(body);
-            } catch (e) {
-                config.errorCallback(e);
-                reject(e)
-            }
-        });
     };
 
-    const post = async <T>(url: string, requestBody: unknown, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> => {
-        return new Promise(async (resolve, reject) => {
-            const { headers, ...rest } = options || {};
-
-            try {
-                const response = await fetch(config.baseUrl + url, {
-                    method: 'POST',
-                    body: JSON.stringify(requestBody),
-                    headers: { ...config.defaultHeaders, ...headers },
-                    ...rest
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-
-                const body: T = await response.json();
-
-                resolve(body);
-            } catch (e) {
-                config.errorCallback(e);
-                reject(e)
-            }
-        });
+    const setConfig = (newConfig: Partial<Configuration>): void => {
+        config = { ...config, ...newConfig };
     };
 
-    const put = async <T>(url: string, requestBody: unknown, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> => {
-        return new Promise(async (resolve, reject) => {
-            const { headers, ...rest } = options || {};
+    const queueMap: Record<string, any> = {};
 
-            try {
-                const response = await fetch(config.baseUrl + url, {
-                    method: 'PUT',
-                    body: JSON.stringify(requestBody),
-                    headers: { ...config.defaultHeaders, ...headers },
-                    ...rest
-                });
+    const requests: Record<string, any> = {};
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
+    ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].forEach((x: string): void => {
+        requests[x] = async <T>(url: string, options?: RequestOptions): Promise<T> => {
+            if (config.queueEnabled) {
+                if (!Object.keys(queueMap).includes(url)) {
+                    queueMap[url] = asyncQueue(config.queueMaxRunning);
                 }
-
-                const body: T = await response.json();
-
-                resolve(body);
-            } catch (e) {
-                config.errorCallback(e);
-                reject(e)
             }
-        });
-    };
 
-    const patch = async <T>(url: string, requestBody: unknown, options?: Omit<RequestInit, 'method' | 'body'>): Promise<T> => {
-        return new Promise(async (resolve, reject) => {
-            const { headers, ...rest } = options || {};
+            const request = () => {
+                return new Promise<T>(async (resolve, reject) => {
+                    const { headers, ...rest } = options || {};
 
-            try {
-                const response = await fetch(config.baseUrl + url, {
-                    method: 'PATCH',
-                    body: JSON.stringify(requestBody),
-                    headers: { ...config.defaultHeaders, ...headers },
-                    ...rest
+                    try {
+                        const response = await fetch(config.baseUrl + url, {
+                            method: x,
+                            headers: { ...config.defaultHeaders, ...headers },
+                            ...rest
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+
+                        const contentType = response.headers.get('Content-Type');
+
+                        if (contentType?.includes('application/json')) {
+                            const body: T = await response.json();
+                            resolve(body);
+                        } else if (contentType?.includes('text')) {
+                            const body = await response.text() as T;
+                            resolve(body);
+                        } else if (contentType?.includes('image/')) {
+                            const body = await response.blob() as T;
+                            resolve(body);
+                        } else {
+                            const body = await response.text() as T;
+                            resolve(body);
+                        }
+                    } catch (e) {
+                        config.errorCallback(e);
+                        reject(e)
+                    }
                 });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-
-                const body: T = await response.json();
-
-                resolve(body);
-            } catch (e) {
-                config.errorCallback(e);
-                reject(e)
             }
-        });
-    };
 
-    const deleteRequest = async <T>(url: string, options?: Omit<RequestInit, 'method'>): Promise<T> => {
-        return new Promise(async (resolve, reject) => {
-            const { headers, ...rest } = options || {};
-
-            try {
-                const response = await fetch(config.baseUrl + url, {
-                    method: 'DELETE',
-                    headers: { ...config.defaultHeaders, ...headers },
-                    ...rest
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-
-                const body: T = await response.json();
-
-                resolve(body);
-            } catch (e) {
-                config.errorCallback(e);
-                reject(e)
+            if (config.queueEnabled) {
+                return queueMap[url](request);
             }
-        });
-    };
+
+            return request();
+        };
+    });
 
     return {
-        create: createEnvoy,
-        get,
-        post,
-        put,
-        patch,
-        delete: deleteRequest,
+        get: requests['GET'],
+        post: requests['POST'],
+        put: requests['PUT'],
+        patch: requests['PATCH'],
+        delete: requests['DELETE'],
+        setConfig,
     };
 };
 
-const envoy = createEnvoy(defaultConfig);
+const envoy: DefaultEnvoy = createEnvoy(defaultConfig) as DefaultEnvoy;
+envoy.create = createEnvoy;
 
 export default envoy;
