@@ -24,6 +24,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const asyncQueue_1 = __importDefault(require("./utils/asyncQueue"));
+const createParamString_1 = __importDefault(require("./utils/createParamString"));
 const defaultConfig = {
     baseUrl: '',
     errorCallback: (e) => null,
@@ -35,57 +36,66 @@ const createEnvoy = (customConfig) => {
     };
     const queueMap = {};
     const requests = {};
-    ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].forEach((x) => {
-        requests[x] = (url, options) => __awaiter(void 0, void 0, void 0, function* () {
-            if (config.queueEnabled) {
-                if (!Object.keys(queueMap).includes(url)) {
-                    queueMap[url] = (0, asyncQueue_1.default)(config.queueMaxRunning);
+    const createRequest = (url, options) => {
+        return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
+            const _a = options || {}, { headers, method, params } = _a, rest = __rest(_a, ["headers", "method", "params"]);
+            try {
+                const response = yield fetch(config.baseUrl + url + (0, createParamString_1.default)(params !== null && params !== void 0 ? params : {}), Object.assign({ method: method, headers: Object.assign(Object.assign({}, config.defaultHeaders), headers) }, rest));
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const contentType = response.headers.get('Content-Type');
+                if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('application/json')) {
+                    const body = yield response.json();
+                    resolve(body);
+                }
+                else if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('text')) {
+                    const body = yield response.text();
+                    resolve(body);
+                }
+                else if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('image/')) {
+                    const body = yield response.blob();
+                    resolve(body);
+                }
+                else {
+                    const body = yield response.text();
+                    resolve(body);
                 }
             }
-            const request = () => {
-                return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
-                    const _a = options || {}, { headers } = _a, rest = __rest(_a, ["headers"]);
-                    try {
-                        const response = yield fetch(config.baseUrl + url, Object.assign({ method: x, headers: Object.assign(Object.assign({}, config.defaultHeaders), headers) }, rest));
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! Status: ${response.status}`);
-                        }
-                        const contentType = response.headers.get('Content-Type');
-                        if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('application/json')) {
-                            const body = yield response.json();
-                            resolve(body);
-                        }
-                        else if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('text')) {
-                            const body = yield response.text();
-                            resolve(body);
-                        }
-                        else if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('image/')) {
-                            const body = yield response.blob();
-                            resolve(body);
-                        }
-                        else {
-                            const body = yield response.text();
-                            resolve(body);
-                        }
-                    }
-                    catch (e) {
-                        config.errorCallback(e);
-                        reject(e);
-                    }
-                }));
-            };
-            if (config.queueEnabled) {
-                return queueMap[url](request);
+            catch (e) {
+                config.errorCallback(e);
+                reject(e);
             }
-            return request();
+        }));
+    };
+    ['GET', 'DELETE', 'HEAD', 'OPTIONS'].forEach((x) => {
+        requests[x] = (url, options) => __awaiter(void 0, void 0, void 0, function* () {
+            return request(url, Object.assign(Object.assign({}, options), { method: x.toLowerCase() }));
         });
     });
+    ['POST', 'PATCH', 'PUT'].forEach((x) => {
+        requests[x] = (url, data, options) => __awaiter(void 0, void 0, void 0, function* () {
+            return request(url, Object.assign(Object.assign({}, options), { method: x.toLowerCase(), body: data }));
+        });
+    });
+    const request = (url, options) => {
+        if (config.queueEnabled) {
+            if (!Object.keys(queueMap).includes(url)) {
+                queueMap[url] = (0, asyncQueue_1.default)(config.queueMaxRunning);
+            }
+        }
+        if (config.queueEnabled) {
+            return queueMap[url](createRequest(url, options));
+        }
+        return createRequest(url, options);
+    };
     return {
         get: requests['GET'],
         post: requests['POST'],
         put: requests['PUT'],
         patch: requests['PATCH'],
         delete: requests['DELETE'],
+        request,
         setConfig,
     };
 };

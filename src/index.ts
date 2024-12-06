@@ -24,61 +24,70 @@ const createEnvoy = (customConfig: Configuration): Envoy => {
     };
 
     const queueMap: Record<string, any> = {};
-
     const requests: Record<string, any> = {};
 
-    ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].forEach((x: string): void => {
-        requests[x] = async <T>(url: string, options?: RequestOptions): Promise<T> => {
-            if (config.queueEnabled) {
-                if (!Object.keys(queueMap).includes(url)) {
-                    queueMap[url] = asyncQueue(config.queueMaxRunning);
-                }
-            }
+    const createRequest = <T>(url: string, options?: any): Promise<T> => {
+        return new Promise<T>(async (resolve, reject) => {
+            const { headers, method, params, ...rest } = options || {};
 
-            const request = () => {
-                return new Promise<T>(async (resolve, reject) => {
-                    const { headers, params, ...rest } = options || {};
-
-                    try {
-                        const response = await fetch(config.baseUrl + url + createParamString(params ?? {}), {
-                            method: x,
-                            headers: { ...config.defaultHeaders, ...headers },
-                            ...rest
-                        });
-
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! Status: ${response.status}`);
-                        }
-
-                        const contentType = response.headers.get('Content-Type');
-
-                        if (contentType?.includes('application/json')) {
-                            const body: T = await response.json();
-                            resolve(body);
-                        } else if (contentType?.includes('text')) {
-                            const body = await response.text() as T;
-                            resolve(body);
-                        } else if (contentType?.includes('image/')) {
-                            const body = await response.blob() as T;
-                            resolve(body);
-                        } else {
-                            const body = await response.text() as T;
-                            resolve(body);
-                        }
-                    } catch (e) {
-                        config.errorCallback(e);
-                        reject(e)
-                    }
+            try {
+                const response = await fetch(config.baseUrl + url + createParamString(params ?? {}), {
+                    method: method,
+                    headers: { ...config.defaultHeaders, ...headers },
+                    ...rest
                 });
-            }
 
-            if (config.queueEnabled) {
-                return queueMap[url](request);
-            }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
 
-            return request();
+                const contentType = response.headers.get('Content-Type');
+
+                if (contentType?.includes('application/json')) {
+                    const body: T = await response.json();
+                    resolve(body);
+                } else if (contentType?.includes('text')) {
+                    const body = await response.text() as T;
+                    resolve(body);
+                } else if (contentType?.includes('image/')) {
+                    const body = await response.blob() as T;
+                    resolve(body);
+                } else {
+                    const body = await response.text() as T;
+                    resolve(body);
+                }
+            } catch (e) {
+                config.errorCallback(e);
+                reject(e)
+            }
+        });
+    }
+
+    ['GET', 'DELETE', 'HEAD', 'OPTIONS'].forEach((x: string): void => {
+        requests[x] = async <T>(url: string, options?: RequestOptions): Promise<T> => {
+            return request(url, { ...options, method: x.toLowerCase() });
         };
     });
+
+    ['POST', 'PATCH', 'PUT'].forEach((x: string): void => {
+        requests[x] = async <T>(url: string, data: BodyInit, options?: RequestOptions): Promise<T> => {
+            return request(url, { ...options, method: x.toLowerCase(), body: data });
+        }
+    });
+
+    const request = <T>(url: string, options?: RequestInit): Promise<T> => {
+        if (config.queueEnabled) {
+            if (!Object.keys(queueMap).includes(url)) {
+                queueMap[url] = asyncQueue(config.queueMaxRunning);
+            }
+        }
+
+        if (config.queueEnabled) {
+            return queueMap[url](createRequest<T>(url, options));
+        }
+
+        return createRequest<T>(url, options);
+    }
 
     return {
         get: requests['GET'],
@@ -86,6 +95,7 @@ const createEnvoy = (customConfig: Configuration): Envoy => {
         put: requests['PUT'],
         patch: requests['PATCH'],
         delete: requests['DELETE'],
+        request,
         setConfig,
     };
 };
