@@ -78,17 +78,20 @@ const createEnvoy = (customConfig) => {
             return request(url, Object.assign(Object.assign({}, options), { method: x.toLowerCase(), body: data }));
         });
     });
-    const request = (url, options) => {
+    const request = (url, options) => __awaiter(void 0, void 0, void 0, function* () {
         if (config.queueEnabled) {
             if (!Object.keys(queueMap).includes(url)) {
                 queueMap[url] = (0, asyncQueue_1.default)(config.queueMaxRunning);
             }
-        }
-        if (config.queueEnabled) {
-            return queueMap[url](createRequest(url, options));
+            const promise = yield new Promise((resolve) => {
+                queueMap[url](() => __awaiter(void 0, void 0, void 0, function* () {
+                    resolve(createRequest(url, options));
+                }));
+            });
+            return promise;
         }
         return createRequest(url, options);
-    };
+    });
     return {
         get: requests['GET'],
         post: requests['POST'],
