@@ -2,6 +2,7 @@ import { Configuration } from './@types/Configuration';
 import { DefaultEnvoy, Envoy } from './@types/Envoy';
 import { RequestOptions } from './@types/RequestOptions';
 import asyncQueue from './utils/asyncQueue';
+import createParamString from './utils/createParamString';
 
 const defaultConfig: Configuration = {
     baseUrl: '',
@@ -36,10 +37,10 @@ const createEnvoy = (customConfig: Configuration): Envoy => {
 
             const request = () => {
                 return new Promise<T>(async (resolve, reject) => {
-                    const { headers, ...rest } = options || {};
+                    const { headers, params, ...rest } = options || {};
 
                     try {
-                        const response = await fetch(config.baseUrl + url, {
+                        const response = await fetch(config.baseUrl + url + createParamString(params ?? {}), {
                             method: x,
                             headers: { ...config.defaultHeaders, ...headers },
                             ...rest

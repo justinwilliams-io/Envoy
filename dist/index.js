@@ -19,106 +19,76 @@ var __rest = (this && this.__rest) || function (s, e) {
         }
     return t;
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+const asyncQueue_1 = __importDefault(require("./utils/asyncQueue"));
 const defaultConfig = {
     baseUrl: '',
     errorCallback: (e) => null,
 };
 const createEnvoy = (customConfig) => {
-    const config = Object.assign({ useQueue: false, queueMaxRunning: 3, enableProfiling: false, defaultHeaders: {}, profilingLogger: () => null }, customConfig);
-    const get = (url, options) => __awaiter(void 0, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
-            const _a = options || {}, { headers } = _a, rest = __rest(_a, ["headers"]);
-            try {
-                const response = yield fetch(config.baseUrl + url, Object.assign({ method: 'GET', headers: Object.assign(Object.assign({}, config.defaultHeaders), headers) }, rest));
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
+    let config = Object.assign({ queueEnabled: false, queueMaxRunning: 3, enableProfiling: false, defaultHeaders: {}, profilingLogger: () => null }, customConfig);
+    const setConfig = (newConfig) => {
+        config = Object.assign(Object.assign({}, config), newConfig);
+    };
+    const queueMap = {};
+    const requests = {};
+    ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].forEach((x) => {
+        requests[x] = (url, options) => __awaiter(void 0, void 0, void 0, function* () {
+            if (config.queueEnabled) {
+                if (!Object.keys(queueMap).includes(url)) {
+                    queueMap[url] = (0, asyncQueue_1.default)(config.queueMaxRunning);
                 }
-                const body = yield response.json();
-                resolve(body);
             }
-            catch (e) {
-                config.errorCallback(e);
-                reject(e);
+            const request = () => {
+                return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
+                    const _a = options || {}, { headers } = _a, rest = __rest(_a, ["headers"]);
+                    try {
+                        const response = yield fetch(config.baseUrl + url, Object.assign({ method: x, headers: Object.assign(Object.assign({}, config.defaultHeaders), headers) }, rest));
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        const contentType = response.headers.get('Content-Type');
+                        if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('application/json')) {
+                            const body = yield response.json();
+                            resolve(body);
+                        }
+                        else if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('text')) {
+                            const body = yield response.text();
+                            resolve(body);
+                        }
+                        else if (contentType === null || contentType === void 0 ? void 0 : contentType.includes('image/')) {
+                            const body = yield response.blob();
+                            resolve(body);
+                        }
+                        else {
+                            const body = yield response.text();
+                            resolve(body);
+                        }
+                    }
+                    catch (e) {
+                        config.errorCallback(e);
+                        reject(e);
+                    }
+                }));
+            };
+            if (config.queueEnabled) {
+                return queueMap[url](request);
             }
-        }));
-    });
-    const post = (url, requestBody, options) => __awaiter(void 0, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
-            const _a = options || {}, { headers } = _a, rest = __rest(_a, ["headers"]);
-            try {
-                const response = yield fetch(config.baseUrl + url, Object.assign({ method: 'POST', body: JSON.stringify(requestBody), headers: Object.assign(Object.assign({}, config.defaultHeaders), headers) }, rest));
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                const body = yield response.json();
-                resolve(body);
-            }
-            catch (e) {
-                config.errorCallback(e);
-                reject(e);
-            }
-        }));
-    });
-    const put = (url, requestBody, options) => __awaiter(void 0, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
-            const _a = options || {}, { headers } = _a, rest = __rest(_a, ["headers"]);
-            try {
-                const response = yield fetch(config.baseUrl + url, Object.assign({ method: 'PUT', body: JSON.stringify(requestBody), headers: Object.assign(Object.assign({}, config.defaultHeaders), headers) }, rest));
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                const body = yield response.json();
-                resolve(body);
-            }
-            catch (e) {
-                config.errorCallback(e);
-                reject(e);
-            }
-        }));
-    });
-    const patch = (url, requestBody, options) => __awaiter(void 0, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
-            const _a = options || {}, { headers } = _a, rest = __rest(_a, ["headers"]);
-            try {
-                const response = yield fetch(config.baseUrl + url, Object.assign({ method: 'PATCH', body: JSON.stringify(requestBody), headers: Object.assign(Object.assign({}, config.defaultHeaders), headers) }, rest));
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                const body = yield response.json();
-                resolve(body);
-            }
-            catch (e) {
-                config.errorCallback(e);
-                reject(e);
-            }
-        }));
-    });
-    const deleteRequest = (url, options) => __awaiter(void 0, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
-            const _a = options || {}, { headers } = _a, rest = __rest(_a, ["headers"]);
-            try {
-                const response = yield fetch(config.baseUrl + url, Object.assign({ method: 'DELETE', headers: Object.assign(Object.assign({}, config.defaultHeaders), headers) }, rest));
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                const body = yield response.json();
-                resolve(body);
-            }
-            catch (e) {
-                config.errorCallback(e);
-                reject(e);
-            }
-        }));
+            return request();
+        });
     });
     return {
-        create: createEnvoy,
-        get,
-        post,
-        put,
-        patch,
-        delete: deleteRequest,
+        get: requests['GET'],
+        post: requests['POST'],
+        put: requests['PUT'],
+        patch: requests['PATCH'],
+        delete: requests['DELETE'],
+        setConfig,
     };
 };
 const envoy = createEnvoy(defaultConfig);
+envoy.create = createEnvoy;
 exports.default = envoy;
