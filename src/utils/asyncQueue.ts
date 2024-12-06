@@ -1,9 +1,9 @@
-export default <T>(maxRunning: number) => {
+export default (maxRunning: number) => {
     let queue: Array<() => Promise<void>> = [];
     let dequeue: Array<Promise<void>> = [];
     let running: number = 0;
 
-    return (request: () => Promise<T>) => {
+    return (request: () => Promise<void>) => {
         queue.push(async (): Promise<void> => {
             running++;
 

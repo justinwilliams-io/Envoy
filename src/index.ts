@@ -23,7 +23,7 @@ const createEnvoy = (customConfig: Configuration): Envoy => {
         config = { ...config, ...newConfig };
     };
 
-    const queueMap: Record<string, any> = {};
+    const queueMap: Record<string, (request: () => Promise<void>) => void> = {};
     const requests: Record<string, any> = {};
 
     const createRequest = <T>(url: string, options?: any): Promise<T> => {
@@ -75,15 +75,19 @@ const createEnvoy = (customConfig: Configuration): Envoy => {
         }
     });
 
-    const request = <T>(url: string, options?: RequestInit): Promise<T> => {
+    const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
         if (config.queueEnabled) {
             if (!Object.keys(queueMap).includes(url)) {
                 queueMap[url] = asyncQueue(config.queueMaxRunning);
             }
-        }
 
-        if (config.queueEnabled) {
-            return queueMap[url](createRequest<T>(url, options));
+            const promise = await new Promise<T>((resolve) => {
+                queueMap[url](async () => {
+                    resolve(createRequest<T>(url, options));
+                });
+            });
+
+            return promise;
         }
 
         return createRequest<T>(url, options);
