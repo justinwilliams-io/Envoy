@@ -1,6 +1,7 @@
 import { Configuration } from './@types/Configuration';
 import { DefaultEnvoy, Envoy } from './@types/Envoy';
 import { RequestOptions } from './@types/RequestOptions';
+import { RequestWithData, RequestWithoutData } from './@types/RequestTypes';
 import asyncQueue from './utils/asyncQueue';
 import createParamString from './utils/createParamString';
 
@@ -23,8 +24,9 @@ const createEnvoy = (customConfig: Configuration): Envoy => {
         config = { ...config, ...newConfig };
     };
 
-    const queueMap: Record<string, (request: () => Promise<void>) => void> = {};
-    const requests: Record<string, any> = {};
+    const queue = asyncQueue(config.queueMaxRunning);
+
+    const requests: Record<string, RequestWithData | RequestWithoutData> = {};
 
     const createRequest = <T>(url: string, options?: any): Promise<T> => {
         return new Promise<T>(async (resolve, reject) => {
@@ -77,12 +79,8 @@ const createEnvoy = (customConfig: Configuration): Envoy => {
 
     const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
         if (config.queueEnabled) {
-            if (!Object.keys(queueMap).includes(url)) {
-                queueMap[url] = asyncQueue(config.queueMaxRunning);
-            }
-
             const promise = await new Promise<T>((resolve) => {
-                queueMap[url](async () => {
+                queue(async () => {
                     resolve(createRequest<T>(url, options));
                 });
             });
@@ -94,11 +92,11 @@ const createEnvoy = (customConfig: Configuration): Envoy => {
     }
 
     return {
-        get: requests['GET'],
-        post: requests['POST'],
-        put: requests['PUT'],
-        patch: requests['PATCH'],
-        delete: requests['DELETE'],
+        get: requests['GET'] as RequestWithoutData,
+        post: requests['POST'] as RequestWithData,
+        put: requests['PUT'] as RequestWithData,
+        patch: requests['PATCH'] as RequestWithData,
+        delete: requests['DELETE'] as RequestWithoutData,
         request,
         setConfig,
     };

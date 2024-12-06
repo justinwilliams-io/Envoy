@@ -34,7 +34,7 @@ const createEnvoy = (customConfig) => {
     const setConfig = (newConfig) => {
         config = Object.assign(Object.assign({}, config), newConfig);
     };
-    const queueMap = {};
+    const queue = (0, asyncQueue_1.default)(config.queueMaxRunning);
     const requests = {};
     const createRequest = (url, options) => {
         return new Promise((resolve, reject) => __awaiter(void 0, void 0, void 0, function* () {
@@ -80,11 +80,8 @@ const createEnvoy = (customConfig) => {
     });
     const request = (url, options) => __awaiter(void 0, void 0, void 0, function* () {
         if (config.queueEnabled) {
-            if (!Object.keys(queueMap).includes(url)) {
-                queueMap[url] = (0, asyncQueue_1.default)(config.queueMaxRunning);
-            }
             const promise = yield new Promise((resolve) => {
-                queueMap[url](() => __awaiter(void 0, void 0, void 0, function* () {
+                queue(() => __awaiter(void 0, void 0, void 0, function* () {
                     resolve(createRequest(url, options));
                 }));
             });

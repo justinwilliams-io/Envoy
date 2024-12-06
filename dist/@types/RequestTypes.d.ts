@@ -1,3 +1,4 @@
+import { RequestOptions } from "./RequestOptions";
 export type GetRequestOptions = Omit<RequestInit, 'method'> & {
     method: 'GET';
 };
@@ -13,3 +14,5 @@ export type PatchRequestOptions = Omit<RequestInit, 'method'> & {
 export type DeleteRequestOptions = Omit<RequestInit, 'method'> & {
     method: 'DELETE';
 };
+export type RequestWithData = <T>(url: string, data: BodyInit, options?: RequestOptions) => Promise<T>;
+export type RequestWithoutData = <T>(url: string, options?: RequestOptions) => Promise<T>;

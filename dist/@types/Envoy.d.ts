@@ -1,11 +1,12 @@
 import { Configuration } from "./Configuration";
+import { RequestWithData, RequestWithoutData } from "./RequestTypes";
 export interface Envoy {
-    get: <T>(url: string) => Promise<T>;
-    post: <T>(url: string, body: BodyInit, options?: Omit<RequestInit, 'method' | 'body'>) => Promise<T>;
-    put: <T>(url: string, body: BodyInit, options?: Omit<RequestInit, 'method' | 'body'>) => Promise<T>;
-    patch: <T>(url: string, body: BodyInit, options?: Omit<RequestInit, 'method' | 'body'>) => Promise<T>;
-    delete: <T>(url: string, options?: Omit<RequestInit, 'method' | 'body'>) => Promise<T>;
-    request: <T>(url: string, options?: RequestInit) => Promise<T>;
+    get: RequestWithoutData;
+    post: RequestWithData;
+    put: RequestWithData;
+    patch: RequestWithData;
+    delete: RequestWithoutData;
+    request: RequestWithoutData;
     setConfig: (newConfig: Partial<Configuration>) => void;
 }
 export interface DefaultEnvoy extends Envoy {
